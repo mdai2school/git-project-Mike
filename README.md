@@ -25,3 +25,12 @@ cases:
 if the inputted folder doesn't exist, the code will throw the IllegalArgumentException: "Attempted to create a file within a folder that does not exist!";
 
 can update the global boolean alreadyExists to FALSE if the created file does NOT exist already
+
+3. test
+parameters:     none
+what it does:   runs the main 3 times, testing that each file exists and deletes them after each attempt
+returns:        boolean if the tests succeded/failed
+
+cases:
+will stop early and return false if expected files are missing
+returns true if it works!
