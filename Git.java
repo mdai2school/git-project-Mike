@@ -2,6 +2,9 @@ import java.io.*;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class Git{
     public static boolean AlreadyExists = true;
@@ -48,7 +51,63 @@ public class Git{
         return file;
     }
 
+    public static String SHA1(String message){
+        try { 
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            
+            byte[] digestedMessage = md.digest(message.getBytes());
+
+            BigInteger number = new BigInteger(1,digestedMessage);
+
+            String hashtext = number.toString(16);
+
+            while (hashtext.length() < 40){
+                hashtext = "0" + hashtext;
+            }
+
+            return hashtext;
+
+        } catch (NoSuchAlgorithmException e){
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    public static void testHash(){
+        String hash1 = SHA1("hello");
+        boolean pass1 = hash1.equals("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d");
+
+        System.out.println("Test 1!\nexpected:aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d\nreturned:" + hash1);
+        if (pass1){
+            System.out.println("passed!");
+        } else{
+            System.out.println("failed!");
+        }
+
+        String hash2 = SHA1("12345");
+        boolean pass2 = hash2.equals("8cb2237d0679ca88db6464eac60da96345513964");
+
+        System.out.println("Test 2!\nexpected:8cb2237d0679ca88db6464eac60da96345513964\nreturned:" + hash2);
+        if (pass2){
+            System.out.println("passed!");
+        } else{
+            System.out.println("failed!");
+        }
+
+        String hash3 = SHA1("Bald!?");
+        boolean pass3 = hash3.equals("b0ac221808a66f8cf0bfcba4a5da29dbcba77e4b");
+
+        System.out.println("Test 3!\nexpected:b0ac221808a66f8cf0bfcba4a5da29dbcba77e4b\nreturned:" + hash3);
+        if (pass3){
+            System.out.println("passed!");
+        } else{
+            System.out.println("failed!");
+        }
+    }
+
     public static boolean test() throws IOException{
+        testHash();
+        
         for (int i = 0; i < 3; i++){
             File git = makeFolder("git");
             File objects = makeFolder("objects", git);
@@ -105,6 +164,8 @@ public class Git{
         }
 
         System.out.println(test());
+
+        testHash();
         
     }
 }
