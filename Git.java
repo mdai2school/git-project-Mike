@@ -1,12 +1,33 @@
 import java.io.*;
+import java.nio.file.*;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
 
 public class Git{
+    public static File git;
+    public static File objects;
+    public static File index;
+    public static File HEAD;
+
+    public static boolean COMPRESS_BLOBS = false;
+
+    static {
+        git = makeFolder("git");
+        objects = makeFolder("objects", git);
+        try {
+            index = makeFile("index", git);
+            HEAD = makeFile("HEAD", git);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to initialize files", e);
+        }
+    }
+
     public static boolean AlreadyExists = true;
 
     public static File makeFolder(String folderName){
@@ -51,26 +72,64 @@ public class Git{
         return file;
     }
 
+    public static String blob(File file) throws IOException{
+        if (file == null || !file.isFile()) {
+            throw new IllegalArgumentException("blob: source must be an existing file");
+        }
+
+        byte[] raw = Files.readAllBytes(file.toPath());
+
+        byte[] payload = COMPRESS_BLOBS ? compress(raw) : raw;
+
+        String blobName = SHA1(payload);
+
+        File blob = makeFile(blobName, objects);
+        try (FileOutputStream fos = new FileOutputStream(blob)) {
+            fos.write(payload);
+        }
+        return blobName;
+    }
+
     public static String SHA1(String message){
-        try { 
+        return SHA1(message.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    public static String SHA1(byte[] bytes){
+        try {
             MessageDigest md = MessageDigest.getInstance("SHA-1");
-            
-            byte[] digestedMessage = md.digest(message.getBytes());
+            byte[] digestedMessage = md.digest(bytes);
 
-            BigInteger number = new BigInteger(1,digestedMessage);
-
+            BigInteger number = new BigInteger(1, digestedMessage);
             String hashtext = number.toString(16);
-
             while (hashtext.length() < 40){
                 hashtext = "0" + hashtext;
             }
-
             return hashtext;
 
         } catch (NoSuchAlgorithmException e){
             throw new RuntimeException(e);
         }
+    }
 
+    public static boolean blobExists(String hash) {
+        if (hash == null || hash.length() != 40) return false;
+        File f = new File(objects, hash);
+        return f.exists() && f.isFile();
+    }
+
+    public static void resetObjects() throws IOException {
+        if (!objects.exists()) return;
+        File[] kids = objects.listFiles();
+        if (kids == null) return;
+        for (File k : kids) k.delete();
+    }
+
+    private static byte[] compress(byte[] in) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(bos, new Deflater())) {
+            dos.write(in);
+        }
+        return bos.toByteArray();
     }
 
     public static void testHash(){
@@ -107,7 +166,7 @@ public class Git{
 
     public static boolean test() throws IOException{
         testHash();
-        
+
         for (int i = 0; i < 3; i++){
             File git = makeFolder("git");
             File objects = makeFolder("objects", git);
@@ -147,25 +206,41 @@ public class Git{
             index.delete();
             git.delete();
         }
-        return true;
 
+        File sample = new File("sample.txt");
+        try (FileOutputStream fos = new FileOutputStream(sample)) {
+            fos.write("hello blob\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        Git.git = makeFolder("git");
+        Git.objects = makeFolder("objects", Git.git);
+        if (!index.exists()) index = makeFile("index", Git.git);
+        if (!HEAD.exists()) HEAD = makeFile("HEAD", Git.git);
+
+        String h = blob(sample);
+        System.out.println("Created blob: " + h);
+        if (!blobExists(h)) {
+            System.out.println("failed! blob not found in objects/");
+            return false;
+        }
+
+        resetObjects();
+        if (blobExists(h)) {
+            System.out.println("failed! resetObjects did not remove blob");
+            return false;
+        }
+
+        sample.delete();
+        System.out.println("All tests passed.");
+        return true;
     }
 
     public static void main(String[] args) throws IOException {
-        File git = makeFolder("git");
-        File objects = makeFolder("objects", git);
-        File index = makeFile("index", git);
-        File HEAD = makeFile("HEAD", git);
-        
-        if (AlreadyExists){
-            System.out.println("Git Repository Already Exists");
-        } else{
-            System.out.println("Git Repository Created");
-        }
+        File f = new File("sample.txt");
+        try (FileOutputStream fos = new FileOutputStream(f)) { fos.write("abc\n".getBytes()); }
+        COMPRESS_BLOBS = false; System.out.println("hash(uncompressed)=" + blob(f));
+        COMPRESS_BLOBS = true;  System.out.println("hash(compressed)  =" + blob(f));
 
         System.out.println(test());
-
-        testHash();
-        
     }
 }
