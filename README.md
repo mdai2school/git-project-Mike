@@ -69,3 +69,19 @@ When compression is on, the file is compressed before it is stored (by default w
 5. index
 The `index` file keeps track of all added files in the repository.
 The program adds a line in the format:
+
+<hash> <relative/path/to/file>
+
+cases:
+If the same file from the same directory with the same contents is added again, it is ignored.
+If the same contents appear in a different folder, both entries are kept.
+If a file is modified and added again, the old entry is replaced with the new hash and a new blob is created.
+There is exactly one space between the hash and the file path, and no trailing newline at the end of the index file.
+
+
+6. Compression
+We added a global boolean COMPRESS_BLOBS.
+If set to true, blob() will compress the file content before writing it into the objects folder.
+We used Java’s built-in java.util.zip.Deflater and DeflaterOutputStream to do the compression.
+
+help from: https://www.geeksforgeeks.org/advance-java/java-util-zip-deflateroutputstream-class-java
