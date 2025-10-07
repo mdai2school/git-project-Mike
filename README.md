@@ -66,19 +66,6 @@ When compression is off, the hash is computed from the raw file contents.
 When compression is on, the file is compressed before it is stored (by default we still hash the raw content unless otherwise specified by the assignment).
 
 
-5. test
-parameters:     none
-what it does:   runs tests to verify that repository files are created correctly and that blob creation and reset work
-returns:        boolean if the tests succeeded/failed
-
-cases:
-will stop early and return false if expected files are missing
-returns true if it works!
-
-
-6. Compression
-We added a global boolean COMPRESS_BLOBS.
-If set to true, blob() will compress the file content before writing it into the objects folder.
-We used Java’s built-in java.util.zip.Deflater and DeflaterOutputStream to do the compression.
-
-help from: https://www.geeksforgeeks.org/advance-java/java-util-zip-deflateroutputstream-class-java
+5. index
+The `index` file keeps track of all added files in the repository.
+The program adds a line in the format:
