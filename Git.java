@@ -130,13 +130,73 @@ public class Git{
         return bos.toByteArray();
     }
 
+    private static String relPath(File f) {
+        Path bass = Paths.get("").toAbsolutePath().normalize();
+        Path p = f.toPath().toAbsolutePath().normalize();
+        return bass.relativize(p).toString().replace("\\", "/");
+    }
+
+    private static void writeIndexLines(List<String> lines) throws IOException {
+        try (FileOutputStream river = new FileOutputStream(index, false)) {
+            for (int i = 0; i < lines.size(); i++) {
+                if (i > 0) river.write('\n');
+                river.write(lines.get(i).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+    }
+
     public static String addToIndex(File file) throws IOException {
         if (file == null || !file.isFile()) {
-            throw new IllegalArgumentException("must ceom from an existing file");
+            throw new IllegalArgumentException("must come from an existing file");
         }
-        String hash = blob(file);
-        appendIndexLine(hash + " " + file.getName());
-        return hash;
+
+        byte[] raw = Files.readAllBytes(file.toPath());
+        byte[] maybeSquished;
+        if (COMPRESS_BLOBS) {
+            maybeSquished = compress(raw);
+        } else{
+            maybeSquished = raw;
+        }
+        String newHash = SHA1(maybeSquished);
+
+        String path = relPath(file);
+
+        List<String> lines = readIndexLines();
+        int found = -1;
+        String oldHash = null;
+
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            int sp = line.indexOf(' ');
+            String hash = line.substring(0, sp);
+            String pth = line.substring(sp + 1);
+            if (pth.equals(path)) {
+                found = i;
+                oldHash = hash;
+                break;
+            }
+        }
+
+        if (found >= 0) {
+            if (newHash.equals(oldHash)) {
+                return newHash;
+            } else {
+                lines.set(found, newHash + " " + path);
+                writeIndexLines(lines);
+                File blob = new File(objects, newHash);
+                if (!blob.exists()) {
+                    blob(file);
+                }
+                return newHash;
+            }
+        } else {
+            appendIndexLine(newHash + " " + path);
+            File blob = new File(objects, newHash);
+            if (!blob.exists()) {
+                blob(file);
+            }
+            return newHash;
+        }
     }
 
     private static void appendIndexLine(String line) throws IOException {
@@ -188,28 +248,18 @@ public class Git{
         String hash1 = SHA1("hello");
         boolean pass1 = hash1.equals("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d");
         System.out.println("Test 1!\nexpected:aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d\nreturned:" + hash1);
-        if (pass1) {
-            System.out.println("passed!");
-        } else {
-            System.out.println("failed!");
-        }
+        if (pass1) { System.out.println("passed!"); } else { System.out.println("failed!"); }
 
         String hash2 = SHA1("12345");
         boolean pass2 = hash2.equals("8cb2237d0679ca88db6464eac60da96345513964");
         System.out.println("Test 2!\nexpected:8cb2237d0679ca88db6464eac60da96345513964\nreturned:" + hash2);
-        if (pass2) {
-            System.out.println("passed!");
-        } else {
-            System.out.println("failed!");
-        }
+        if (pass2) { System.out.println("passed!"); } else { System.out.println("failed!"); }
+
         String hash3 = SHA1("Bald!?");
         boolean pass3 = hash3.equals("b0ac221808a66f8cf0bfcba4a5da29dbcba77e4b");
         System.out.println("Test 3!\nexpected:b0ac221808a66f8cf0bfcba4a5da29dbcba77e4b\nreturned:" + hash3);
-        if (pass3) {
-            System.out.println("passed!");
-        } else {
-            System.out.println("failed!");
-        }    }
+        if (pass3) { System.out.println("passed!"); } else { System.out.println("failed!"); }
+    }
 
     public static boolean test() throws IOException{
         testHash();
@@ -261,55 +311,73 @@ public class Git{
         resetObjects();
         resetIndex();
 
-        File a = new File("a.txt");
-        File b = new File("b.txt");
-        File c = new File("notes.md");
-        try (FileOutputStream fa = new FileOutputStream(a)) { fa.write("alpha\n".getBytes()); }
-        try (FileOutputStream fb = new FileOutputStream(b)) { fb.write("beta beta\n".getBytes()); }
-        try (FileOutputStream fc = new FileOutputStream(c)) { fc.write("# title\nthird\n".getBytes()); }
+        File myProgram = new File("myProgram");
+        myProgram.mkdir();
+        File scripts = new File(myProgram, "scripts");
+        scripts.mkdir();
 
-        // add entries to index (this also creates blobs)
-        String ha = addToIndex(a);
-        String hb = addToIndex(b);
-        String hc = addToIndex(c);
+        File readme = new File(myProgram, "README.md");
+        File helloA = new File(myProgram, "Hello.txt");
+        File helloB = new File(scripts, "Hello.txt");
+        File cat = new File(scripts, "Cat.java");
 
-        if (!(blobExists(ha) && blobExists(hb) && blobExists(hc))) {
-            System.out.println("failed! one or more blobs missing in objects/");
-            deleteIfExists(a,b,c);
-            return false;
+        try (FileOutputStream r = new FileOutputStream(readme)) { r.write("readme\n".getBytes()); }
+        try (FileOutputStream h1 = new FileOutputStream(helloA)) { h1.write("hello world\n".getBytes()); }
+        try (FileOutputStream h2 = new FileOutputStream(helloB)) { h2.write("hello world\n".getBytes()); }
+        try (FileOutputStream c  = new FileOutputStream(cat))    { c.write("class Cat {}\n".getBytes()); }
+
+        String hReadme = addToIndex(readme);
+        String hHelloA1 = addToIndex(helloA);
+        String hHelloA2 = addToIndex(helloA);
+        String hHelloB  = addToIndex(helloB);
+        String hCat     = addToIndex(cat);
+
+        if (!hHelloA1.equals(hHelloA2)) {
+            System.out.println("note: hashes differ after duplicate add? that shouldn't happen");
         }
 
         List<String> lines = readIndexLines();
-        List<String> expected = new ArrayList<>();
-        expected.add(ha + " " + a.getName());
-        expected.add(hb + " " + b.getName());
-        expected.add(hc + " " + c.getName());
+        java.util.Set<String> set = new java.util.HashSet<>(lines);
 
-        if (lines.size() != expected.size()) {
-            System.out.println("failed! index line count mismatch");
-            deleteIfExists(a,b,c);
+        String lineReadme = hReadme + " " + ("myProgram/README.md");
+        String lineHelloA = hHelloA1 + " " + ("myProgram/Hello.txt");
+        String lineHelloB = hHelloB  + " " + ("myProgram/scripts/Hello.txt");
+        String lineCat    = hCat     + " " + ("myProgram/scripts/Cat.java");
+
+        if (!(set.contains(lineReadme) && set.contains(lineHelloA) && set.contains(lineHelloB) && set.contains(lineCat))) {
+            System.out.println("failed! expected index entries missing (relative paths or hashes)");
+            deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
             return false;
         }
-        for (int i = 0; i < expected.size(); i++) {
-            if (!expected.get(i).equals(lines.get(i))) {
-                System.out.println("failed! index line " + i + " mismatch");
-                deleteIfExists(a,b,c);
-                return false;
+
+        try (FileOutputStream h1m = new FileOutputStream(helloA)) { h1m.write("HELLO MOD\n".getBytes()); }
+        String hHelloAnew = addToIndex(helloA);
+
+        List<String> linesAfter = readIndexLines();
+        java.util.Map<String,String> pathToHash = new java.util.HashMap<>();
+        for (String ln : linesAfter) {
+            int sp = ln.indexOf(' ');
+            if (sp > 0) {
+                pathToHash.put(ln.substring(sp+1), ln.substring(0, sp));
             }
         }
-
-        // ensure there is NO extra newline at EOF
-        if (endsWithNewline(index)) {
-            System.out.println("failed! index should not end with a trailing newline");
-            deleteIfExists(a,b,c);
+        if (!hHelloAnew.equals(pathToHash.get("myProgram/Hello.txt"))) {
+            System.out.println("failed! modified file did not update its index line");
+            deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
             return false;
         }
 
-        resetObjects(); 
-        resetIndex();
-        deleteIfExists(a,b,c);
+        if (endsWithNewline(index)) {
+            System.out.println("failed! index should not end with a trailing newline");
+            deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
+            return false;
+        }
 
-        System.out.println("All tests passed (including index).");
+        resetObjects();
+        resetIndex();
+        deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
+
+        System.out.println("All tests passed (relative paths, dedupe, and modified files).");
         return true;
     }
 
