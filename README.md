@@ -78,6 +78,12 @@ If the same contents appear in a different folder, both entries are kept.
 If a file is modified and added again, the old entry is replaced with the new hash and a new blob is created.
 There is exactly one space between the hash and the file path, and no trailing newline at the end of the index file.
 
+Example paths used in testing:
+myProgram/Hello.txt
+myProgram/scripts/Hello.txt
+myProgram/scripts/Cat.java
+myProgram/scripts/README.md
+
 
 6. Compression
 We added a global boolean COMPRESS_BLOBS.
@@ -85,3 +91,18 @@ If set to true, blob() will compress the file content before writing it into the
 We used Java’s built-in java.util.zip.Deflater and DeflaterOutputStream to do the compression.
 
 help from: https://www.geeksforgeeks.org/advance-java/java-util-zip-deflateroutputstream-class-java
+
+
+7. tree (directory trees)
+parameters:     (File dir)
+what it does:   creates a “tree object” for a directory. For each immediate child:
+- files add a line:  blob <SHA1> <name>
+- subdirectories add: tree <SHA1> <name>      (the subdirectory is built recursively first)
+
+returns:        the SHA-1 hash of the tree’s text content
+
+details:
+- The tree content has no trailing newline.
+- The tree text is written to "git/objects/<treeHash>" if it doesn't already exist.
+- Child names are relative to the directory (no full paths).
+- We do not sort; the order follows File.listFiles() for the OS.
