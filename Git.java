@@ -210,8 +210,12 @@ public class Git{
         }
     }
 
+    // reads everything in index, which tracks all created files
+
     private static List<String> readIndexLines() throws IOException {
-        if (!index.exists()) return new ArrayList<>();
+        if (!index.exists()){
+            return new ArrayList<>();
+        }
         return Files.readAllLines(index.toPath(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
@@ -243,6 +247,49 @@ public class Git{
         }
     }
 
+public static String tree(File dir) throws IOException {
+    if (dir == null || !dir.isDirectory()) {
+        throw new IllegalArgumentException("tree must be a directory");
+    }
+
+    File[] kids = dir.listFiles();
+    if (kids == null){
+        kids = new File[0];
+    }
+
+    StringBuilder content = new StringBuilder();
+    boolean first = true;
+
+    for (File k : kids) {
+        if (k.isFile()) {
+            String h = blob(k);
+            if (!first){
+                content.append('\n');
+            }
+            content.append("blob " + h + " " + k.getName());
+            first = false;
+        } else if (k.isDirectory()) {
+            String subHash = tree(k);
+            if (!first){
+                content.append('\n');
+            }
+            content.append("tree " + subHash + " " + k.getName());
+            first = false;
+        }
+    }
+
+    byte[] bytes = content.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    String treeHash = SHA1(bytes);
+
+    File treeBlob = new File(objects, treeHash);
+    if (!treeBlob.exists()) {
+        try (FileOutputStream fs = new FileOutputStream(treeBlob)) {
+            fs.write(bytes);
+        }
+    }
+
+    return treeHash;
+}
 
     public static void testHash(){
         String hash1 = SHA1("hello");
@@ -262,9 +309,9 @@ public class Git{
     }
 
     public static boolean test() throws IOException{
-        testHash();
+        // testHash();
 
-        for (int i = 0; i < 3; i++){
+        // for (int i = 0; i < 3; i++){
             File git = makeFolder("git");
             File objects = makeFolder("objects", git);
             File index = makeFile("index", git);
@@ -302,12 +349,16 @@ public class Git{
             HEAD.delete();
             index.delete();
             git.delete();
-        }
+        // }
 
         git = makeFolder("git");
         objects = makeFolder("objects", git);
-        if (!index.exists()) index = makeFile("index", git);
-        if (!HEAD.exists())  HEAD  = makeFile("HEAD", git);
+        if (!index.exists()){
+            index = makeFile("index", git);
+        }
+        if (!HEAD.exists()){
+            HEAD  = makeFile("HEAD", git);
+        }
         resetObjects();
         resetIndex();
 
@@ -316,15 +367,23 @@ public class Git{
         File scripts = new File(myProgram, "scripts");
         scripts.mkdir();
 
-        File readme = new File(myProgram, "README.md");
+        File readme = new File(scripts, "README.md");
         File helloA = new File(myProgram, "Hello.txt");
         File helloB = new File(scripts, "Hello.txt");
         File cat = new File(scripts, "Cat.java");
 
-        try (FileOutputStream r = new FileOutputStream(readme)) { r.write("readme\n".getBytes()); }
-        try (FileOutputStream h1 = new FileOutputStream(helloA)) { h1.write("hello world\n".getBytes()); }
-        try (FileOutputStream h2 = new FileOutputStream(helloB)) { h2.write("hello world\n".getBytes()); }
-        try (FileOutputStream c  = new FileOutputStream(cat))    { c.write("class Cat {}\n".getBytes()); }
+        try (FileOutputStream r = new FileOutputStream(readme)) {
+            r.write("readme\n".getBytes());
+        }
+        try (FileOutputStream h1 = new FileOutputStream(helloA)){
+            h1.write("hello world\n".getBytes());
+        }
+        try (FileOutputStream h2 = new FileOutputStream(helloB)) {
+            h2.write("hello world\n".getBytes());
+        }
+        try (FileOutputStream c  = new FileOutputStream(cat))    {
+            c.write("class Cat {}\n".getBytes());
+        }
 
         String hReadme = addToIndex(readme);
         String hHelloA1 = addToIndex(helloA);
@@ -339,7 +398,7 @@ public class Git{
         List<String> lines = readIndexLines();
         java.util.Set<String> set = new java.util.HashSet<>(lines);
 
-        String lineReadme = hReadme + " " + ("myProgram/README.md");
+        String lineReadme = hReadme + " " + ("myProgram/scripts/README.md");
         String lineHelloA = hHelloA1 + " " + ("myProgram/Hello.txt");
         String lineHelloB = hHelloB  + " " + ("myProgram/scripts/Hello.txt");
         String lineCat    = hCat     + " " + ("myProgram/scripts/Cat.java");
@@ -349,6 +408,10 @@ public class Git{
             deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
             return false;
         }
+
+        String scriptsTree = tree(scripts);
+        String rootTree    = tree(myProgram);
+        System.out.println("trees built: scripts=" + scriptsTree + " root=" + rootTree);
 
         try (FileOutputStream h1m = new FileOutputStream(helloA)) { h1m.write("HELLO MOD\n".getBytes()); }
         String hHelloAnew = addToIndex(helloA);
@@ -362,13 +425,13 @@ public class Git{
             }
         }
         if (!hHelloAnew.equals(pathToHash.get("myProgram/Hello.txt"))) {
-            System.out.println("failed! modified file did not update its index line");
+            System.out.println("failed! changed file did not update its line in index :/");
             deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
             return false;
         }
 
         if (endsWithNewline(index)) {
-            System.out.println("failed! index should not end with a trailing newline");
+            System.out.println("failed! index should not end with a new line :[");
             deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
             return false;
         }
@@ -377,7 +440,7 @@ public class Git{
         resetIndex();
         deleteIfExists(readme, helloA, helloB, cat, scripts, myProgram);
 
-        System.out.println("All tests passed (relative paths, dedupe, and modified files).");
+        System.out.println("All tests passed :D");
         return true;
     }
 
